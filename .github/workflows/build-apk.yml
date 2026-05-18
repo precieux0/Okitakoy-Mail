@@ -4,7 +4,9 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'flutter_app/**'
+      - '**.dart'
+      - 'pubspec.yaml'
+      - 'android/**'
       - '.github/workflows/build-apk.yml'
   workflow_dispatch:
 
@@ -12,9 +14,6 @@ jobs:
   build:
     name: Build APK (Android 13+, API 33)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: flutter_app
 
     steps:
       - name: Checkout
@@ -32,11 +31,18 @@ jobs:
           channel: 'stable'
           flutter-version: '3.24.3'
 
-      - name: Generate Android scaffolding
-        run: flutter create --platforms=android --project-name okitakoy_mail --org corp.okitakoy .
+      # Si le dossier android n'existe pas ou est corrompu, on le régénère
+      - name: Regenerate Android folder (clean)
+        run: |
+          rm -rf android/
+          flutter create --platforms=android --project-name okitakoy_mail --org corp.okitakoy .
 
-      - name: Patch Android config
+      - name: Patch Android config (minSdk 33, label, permissions, OAuth callback)
         run: bash scripts/patch_android.sh
+
+      # Force l'embedding v2 dans gradle.properties (précaution)
+      - name: Force embedding v2
+        run: echo "flutter_embedding_v2=true" >> android/gradle.properties
 
       - name: Get dependencies
         run: flutter pub get
@@ -73,5 +79,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: okitakoy-mail-release-apk
-          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error

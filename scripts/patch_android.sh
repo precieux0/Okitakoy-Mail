@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Patches the auto-generated Android project so it matches our requirements:
-# - minSdk 21, targetSdk/compileSdk 33 (Android 13)
-# - custom URL scheme for GitHub OAuth callback
-# - Internet permission (for OAuth + mail API)
+# Patches Android project for:
+# - minSdk 33, targetSdk 33, compileSdk 33 (Android 13+)
+# - App label: "Okitakoy Mail"
+# - Internet permission & OAuth callback (okitakoymail)
 set -euo pipefail
 
 ANDROID_DIR="android"
@@ -10,28 +10,31 @@ MANIFEST="$ANDROID_DIR/app/src/main/AndroidManifest.xml"
 APP_GRADLE="$ANDROID_DIR/app/build.gradle"
 APP_GRADLE_KTS="$ANDROID_DIR/app/build.gradle.kts"
 
-echo "==> Patching Android SDK levels"
+echo "==> Patching SDK levels to 33 (Android 13 only, no lower)"
 if [ -f "$APP_GRADLE_KTS" ]; then
   sed -i \
     -e 's/compileSdk *= *flutter.compileSdkVersion/compileSdk = 33/' \
     -e 's/targetSdk *= *flutter.targetSdkVersion/targetSdk = 33/' \
-    -e 's/minSdk *= *flutter.minSdkVersion/minSdk = 21/' \
+    -e 's/minSdk *= *flutter.minSdkVersion/minSdk = 33/' \
     "$APP_GRADLE_KTS"
 elif [ -f "$APP_GRADLE" ]; then
   sed -i \
     -e 's/compileSdkVersion .*/compileSdkVersion 33/' \
     -e 's/targetSdkVersion .*/targetSdkVersion 33/' \
-    -e 's/minSdkVersion .*/minSdkVersion 21/' \
+    -e 's/minSdkVersion .*/minSdkVersion 33/' \
     "$APP_GRADLE"
 fi
+
+echo "==> Setting app label to 'Okitakoy Mail'"
+sed -i 's/android:label=".*"/android:label="Okitakoy Mail"/' "$MANIFEST"
 
 echo "==> Adding INTERNET permission + OAuth callback intent-filter"
 python3 - <<'PY'
 import re, pathlib
 p = pathlib.Path("android/app/src/main/AndroidManifest.xml")
 s = p.read_text()
+
 if "android.permission.INTERNET" not in s:
-    s = s.replace("<manifest", '<manifest', 1)
     s = re.sub(r"(<manifest[^>]*>)", r'\1\n    <uses-permission android:name="android.permission.INTERNET"/>', s, count=1)
 
 callback_activity = '''
