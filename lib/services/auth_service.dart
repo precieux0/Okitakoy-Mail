@@ -88,10 +88,9 @@ class AuthService {
         '&scope=read:user%20user:email'
         '&redirect_uri=${Uri.encodeComponent(OAuthConfig.githubRedirectUri)}';
 
-    // Le paramètre callbackUrlScheme est obligatoire pour flutter_web_auth_2
     final result = await FlutterWebAuth2.authenticate(
       url: authUrl,
-      callbackUrlScheme: 'http',   // car on utilise http://localhost:53069/callback
+      callbackUrlScheme: 'okitakoymail', // schéma personnalisé pour redirection après la page HTML
     );
     final code = Uri.parse(result).queryParameters['code'];
     if (code == null) throw Exception('Code GitHub manquant.');
