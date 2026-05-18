@@ -6,13 +6,6 @@ import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:http/http.dart' as http;
 import '../config/oauth_config.dart';
 
-/// Auth service - no Firebase.
-/// - Email/password: stored locally (hashed) via flutter_secure_storage.
-/// - Google: google_sign_in.
-/// - GitHub: OAuth via flutter_web_auth_2 (device-side, no backend needed
-///   because we use the Device Flow-style exchange against a public proxy you control,
-///   OR you can swap to a server. By default we do the standard authorization-code
-///   flow and rely on GitHub returning the token to a custom scheme. See configuration.md).
 class AuthService {
   AuthService._();
   static final instance = AuthService._();
@@ -95,10 +88,8 @@ class AuthService {
         '&scope=read:user%20user:email'
         '&redirect_uri=${Uri.encodeComponent(OAuthConfig.githubRedirectUri)}';
 
-    final result = await FlutterWebAuth2.authenticate(
-      url: authUrl,
-      callbackUrlScheme: OAuthConfig.callbackScheme,
-    );
+    // Pas de callbackUrlScheme car on utilise http://localhost
+    final result = await FlutterWebAuth2.authenticate(url: authUrl);
     final code = Uri.parse(result).queryParameters['code'];
     if (code == null) throw Exception('Code GitHub manquant.');
 

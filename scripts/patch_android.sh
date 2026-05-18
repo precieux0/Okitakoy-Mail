@@ -1,19 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ANDROID_DIR="android"
-MANIFEST="$ANDROID_DIR/app/src/main/AndroidManifest.xml"
-APP_GRADLE="$ANDROID_DIR/app/build.gradle"
-APP_GRADLE_KTS="$ANDROID_DIR/app/build.gradle.kts"
+MANIFEST="android/app/src/main/AndroidManifest.xml"
+APP_GRADLE="android/app/build.gradle"
 
 echo "==> Patching SDK levels to 33"
-if [ -f "$APP_GRADLE_KTS" ]; then
-  sed -i \
-    -e 's/compileSdk *= *flutter.compileSdkVersion/compileSdk = 33/' \
-    -e 's/targetSdk *= *flutter.targetSdkVersion/targetSdk = 33/' \
-    -e 's/minSdk *= *flutter.minSdkVersion/minSdk = 33/' \
-    "$APP_GRADLE_KTS"
-elif [ -f "$APP_GRADLE" ]; then
+if [ -f "$APP_GRADLE" ]; then
   sed -i \
     -e 's/compileSdkVersion .*/compileSdkVersion 33/' \
     -e 's/targetSdkVersion .*/targetSdkVersion 33/' \
@@ -24,29 +16,10 @@ fi
 echo "==> Setting app label to 'Okitakoy Mail'"
 sed -i 's/android:label=".*"/android:label="Okitakoy Mail"/' "$MANIFEST"
 
-echo "==> Adding INTERNET permission + OAuth callback"
-python3 - <<'PY'
-import re, pathlib
-p = pathlib.Path("android/app/src/main/AndroidManifest.xml")
-s = p.read_text()
-if "android.permission.INTERNET" not in s:
-    s = re.sub(r"(<manifest[^>]*>)", r'\1\n    <uses-permission android:name="android.permission.INTERNET"/>', s, count=1)
-callback_activity = '''
-        <activity
-            android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
-            android:exported="true">
-            <intent-filter android:label="flutter_web_auth_2">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="okitakoymail" />
-            </intent-filter>
-        </activity>
-'''
-if "flutter_web_auth_2.CallbackActivity" not in s:
-    s = s.replace("</application>", callback_activity + "    </application>")
-p.write_text(s)
-PY
+echo "==> Adding INTERNET permission"
+if ! grep -q "android.permission.INTERNET" "$MANIFEST"; then
+  sed -i '/<manifest[^>]*>/a\    <uses-permission android:name="android.permission.INTERNET"/>' "$MANIFEST"
+fi
 
 echo "==> Adding signing config to build.gradle"
 if [ -f "$APP_GRADLE" ]; then
