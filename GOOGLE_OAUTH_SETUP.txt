@@ -1,0 +1,23 @@
+GOOGLE SIGN-IN FIX
+
+1. Create OAuth Android Client:
+   Package:
+   corp.Okitakoy Mail
+
+   SHA-1:
+   keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
+
+2. Create OAuth Web Client.
+
+3. Copy ONLY the WEB CLIENT ID.
+
+4. Open:
+   lib/config/oauth_config.dart
+
+5. Replace:
+   REPLACE_WITH_WEB_CLIENT_ID.apps.googleusercontent.com
+
+6. Run:
+   flutter clean
+   flutter pub get
+   flutter run

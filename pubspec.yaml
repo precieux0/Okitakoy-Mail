@@ -1,0 +1,40 @@
+name: okitakoy_mail
+description: Okitakoy Mail - Boîte mail temporaire par Okitakoy Corp
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  flutter_secure_storage: ^9.2.2
+  google_sign_in: ^6.2.1
+  flutter_web_auth_2: ^4.0.1
+  crypto: ^3.0.3
+  url_launcher: ^6.3.1
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/logo.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0EA5E9"
+  adaptive_icon_foreground: "assets/logo.png"

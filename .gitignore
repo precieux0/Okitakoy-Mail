@@ -1,0 +1,22 @@
+# Build artifacts
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Generated Android scaffolding (recreated by CI / `flutter create`)
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# IDE
+.idea/
+.vscode/
+*.iml
