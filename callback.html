@@ -3,16 +3,21 @@
 <head>
     <title>Redirection Okitakoy Mail</title>
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-        if (code) {
-            window.location.href = 'okitakoymail://callback?code=' + code;
-        } else {
-            document.body.innerText = 'Erreur : aucun code reçu.';
-        }
+        (function() {
+            // Affiche l'URL complète pour debug
+            document.body.innerText = window.location.href;
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                // Redirige vers le schéma personnalisé après 0.1s
+                setTimeout(function() {
+                    window.location.href = 'okitakoymail://callback?code=' + code;
+                }, 100);
+            } else {
+                document.body.innerText = 'Erreur : aucun code reçu.';
+            }
+        })();
     </script>
 </head>
-<body>
-    <p>Redirection en cours...</p>
-</body>
+<body></body>
 </html>
