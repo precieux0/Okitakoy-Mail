@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../widgets/oauth_buttons.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -62,14 +61,6 @@ class _SignupScreenState extends State<SignupScreen> {
                     ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.4))
                     : const Text("S'inscrire"),
               ),
-              const SizedBox(height: 20),
-              const Row(children: [
-                Expanded(child: Divider()),
-                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('ou')),
-                Expanded(child: Divider()),
-              ]),
-              const SizedBox(height: 16),
-              const OAuthButtons(),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

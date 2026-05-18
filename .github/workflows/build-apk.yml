@@ -49,12 +49,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          GITHUB_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
-          GITHUB_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
         run: |
-          flutter build apk --release \
-            --dart-define=GITHUB_CLIENT_ID="${GITHUB_CLIENT_ID}" \
-            --dart-define=GITHUB_CLIENT_SECRET="${GITHUB_CLIENT_SECRET}"
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
