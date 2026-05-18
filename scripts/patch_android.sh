@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Patches Android project for:
-# - minSdk 33, targetSdk 33, compileSdk 33 (Android 13+)
-# - App label: "Okitakoy Mail"
-# - Internet permission & OAuth callback (okitakoymail)
 set -euo pipefail
 
 ANDROID_DIR="android"
@@ -10,7 +6,7 @@ MANIFEST="$ANDROID_DIR/app/src/main/AndroidManifest.xml"
 APP_GRADLE="$ANDROID_DIR/app/build.gradle"
 APP_GRADLE_KTS="$ANDROID_DIR/app/build.gradle.kts"
 
-echo "==> Patching SDK levels to 33 (Android 13 only, no lower)"
+echo "==> Patching SDK levels to 33"
 if [ -f "$APP_GRADLE_KTS" ]; then
   sed -i \
     -e 's/compileSdk *= *flutter.compileSdkVersion/compileSdk = 33/' \
@@ -28,15 +24,13 @@ fi
 echo "==> Setting app label to 'Okitakoy Mail'"
 sed -i 's/android:label=".*"/android:label="Okitakoy Mail"/' "$MANIFEST"
 
-echo "==> Adding INTERNET permission + OAuth callback intent-filter"
+echo "==> Adding INTERNET permission + OAuth callback"
 python3 - <<'PY'
 import re, pathlib
 p = pathlib.Path("android/app/src/main/AndroidManifest.xml")
 s = p.read_text()
-
 if "android.permission.INTERNET" not in s:
     s = re.sub(r"(<manifest[^>]*>)", r'\1\n    <uses-permission android:name="android.permission.INTERNET"/>', s, count=1)
-
 callback_activity = '''
         <activity
             android:name="com.linusu.flutter_web_auth_2.CallbackActivity"
@@ -52,7 +46,22 @@ callback_activity = '''
 if "flutter_web_auth_2.CallbackActivity" not in s:
     s = s.replace("</application>", callback_activity + "    </application>")
 p.write_text(s)
-print("Manifest patched.")
 PY
+
+echo "==> Adding signing config to build.gradle"
+if [ -f "$APP_GRADLE" ]; then
+  if ! grep -q "signingConfigs" "$APP_GRADLE"; then
+    sed -i '/android {/a\
+    signingConfigs {\
+        release {\
+            storeFile file("keystore.jks")\
+            storePassword System.getenv("KEYSTORE_PASSWORD")\
+            keyPassword System.getenv("KEY_PASSWORD")\
+            keyAlias System.getenv("KEY_ALIAS")\
+        }\
+    }' "$APP_GRADLE"
+  fi
+  sed -i '/buildTypes {/,/}/ s/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' "$APP_GRADLE"
+fi
 
 echo "==> Done."
