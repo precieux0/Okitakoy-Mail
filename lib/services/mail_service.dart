@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_service.dart';
+import '../main.dart';
 
 class MailService {
   MailService._();
@@ -15,8 +15,6 @@ class MailService {
   String? _address;
 
   String? get address => _address;
-
-  final _supabase = Supabase.instance.client;
 
   Future<List<String>> _domains() async {
     final r = await http.get(Uri.parse('$_base/domains'));
@@ -31,13 +29,12 @@ class MailService {
     return List.generate(n, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
-  /// Sauvegarde l'adresse email dans Supabase (table custom_emails)
   Future<void> _saveEmailToSupabase(String emailAddress, bool isCustom) async {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
     try {
-      await _supabase.from('custom_emails').insert({
-        'user_email': user['email'],   // correspond à profiles.email
+      await supabase.from('custom_emails').insert({
+        'user_email': user['email'],
         'email_address': emailAddress,
         'is_custom': isCustom,
       });
@@ -46,20 +43,18 @@ class MailService {
     }
   }
 
-  /// Sauvegarde un message dans l'historique Supabase (table email_history)
   Future<void> _saveMessageToSupabase(Map<String, dynamic> message) async {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
     try {
-      // Vérifier si le message existe déjà pour cet utilisateur
-      final exists = await _supabase
+      final exists = await supabase
           .from('email_history')
           .select()
           .eq('user_email', user['email'])
           .eq('message_id', message['id'])
           .maybeSingle();
       if (exists == null) {
-        await _supabase.from('email_history').insert({
+        await supabase.from('email_history').insert({
           'user_email': user['email'],
           'message_id': message['id'],
           'subject': message['subject'],
@@ -134,14 +129,12 @@ class MailService {
       'token': _token, 'id': _accountId, 'address': _address,
     }));
 
-    // Sauvegarde dans Supabase (email personnalisé ou aléatoire)
     await _saveEmailToSupabase(address, localPart != null);
 
-    // Mettre à jour mail_tm_id dans profiles
     final user = await AuthService.instance.currentUser();
     if (user != null) {
       try {
-        await _supabase
+        await supabase
             .from('profiles')
             .update({'mail_tm_id': _accountId})
             .eq('email', user['email']);
@@ -168,7 +161,6 @@ class MailService {
     final data = jsonDecode(r.body) as Map<String, dynamic>;
     final messages = (data['hydra:member'] as List).cast<Map<String, dynamic>>();
 
-    // Sauvegarde chaque message dans Supabase (asynchrone, non bloquante)
     for (final msg in messages) {
       _saveMessageToSupabase(msg);
     }

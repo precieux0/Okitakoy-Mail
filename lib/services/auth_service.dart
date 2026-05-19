@@ -1,14 +1,13 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../main.dart';
 
 class AuthService {
   AuthService._();
   static final instance = AuthService._();
 
   final _storage = const FlutterSecureStorage();
-  final _supabase = Supabase.instance.client;
 
   static const _kUserKey = 'current_user';
   static const _kUsersKey = 'users_db';
@@ -21,7 +20,6 @@ class AuthService {
 
   Future<void> signOut() async {
     await _storage.delete(key: _kUserKey);
-    await _supabase.auth.signOut();
   }
 
   String _hash(String pwd) =>
@@ -38,24 +36,20 @@ class AuthService {
     await _storage.write(key: _kUsersKey, value: jsonEncode(users));
   }
 
-  /// Synchronise un utilisateur local avec Supabase (table profiles)
   Future<void> _syncUserToSupabase(String email, String name) async {
     try {
-      final existing = await _supabase
+      final existing = await supabase
           .from('profiles')
           .select()
           .eq('email', email)
           .maybeSingle();
-
       if (existing == null) {
-        // Créer le profil avec email comme clé primaire
-        await _supabase.from('profiles').insert({
+        await supabase.from('profiles').insert({
           'email': email,
           'full_name': name,
         });
       } else {
-        // Mettre à jour le nom
-        await _supabase
+        await supabase
             .from('profiles')
             .update({'full_name': name})
             .eq('email', email);

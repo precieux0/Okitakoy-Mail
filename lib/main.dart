@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase/supabase.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/about_screen.dart';
 
+late final SupabaseClient supabase;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: 'https://ckhzttmzacsafkschtuv.supabase.co',
-    anonKey: 'sb_publishable_WvPEgzcKbzIVZvNGQKlwzA_uBRhGOkS',
+  supabase = SupabaseClient(
+    'https://ckhzttmzacsafkschtuv.supabase.co',
+    'sb_publishable_WvPEgzcKbzIVZvNGQKlwzA_uBRhGOkS',
   );
   runApp(const OkitakoyMailApp());
 }
 
+// Le reste de OkitakoyMailApp (inchangé)
 class OkitakoyMailApp extends StatelessWidget {
   const OkitakoyMailApp({super.key});
 
