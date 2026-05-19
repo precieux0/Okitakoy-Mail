@@ -29,7 +29,7 @@ dependency_overrides:
   app_links:
     git:
       url: https://github.com/llfbandit/app_links.git
-      ref: main
+      ref: master   # correction : la branche par défaut est 'master'
 
 flutter:
   uses-material-design: true
