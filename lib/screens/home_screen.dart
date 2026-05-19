@@ -35,10 +35,77 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _newInbox() async {
-    await MailService.instance.reset();
-    _address = await MailService.instance.createInbox();
-    await _refresh();
+  // Nouvelle méthode : affiche un dialogue pour choisir aléatoire ou personnalisé
+  Future<void> _showNewInboxDialog() async {
+    final controller = TextEditingController();
+    final bool? custom = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nouvelle adresse'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Vous pouvez créer une adresse aléatoire ou personnalisée.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'Laissez vide pour aléatoire',
+                labelText: 'Nom personnalisé (optionnel)',
+                helperText: 'Caractères autorisés : a-z 0-9 . _ -',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Aléatoire'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Utiliser le nom'),
+          ),
+        ],
+      ),
+    );
+
+    if (custom == true) {
+      // Mode personnalisé
+      final local = controller.text.trim();
+      if (local.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Veuillez entrer un nom ou choisir Aléatoire')),
+        );
+        return;
+      }
+      try {
+        setState(() => _loading = true);
+        await MailService.instance.reset();
+        _address = await MailService.instance.createInboxWithCustomLocalPart(local);
+        await _refresh();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    } else {
+      // Mode aléatoire
+      try {
+        setState(() => _loading = true);
+        await MailService.instance.reset();
+        _address = await MailService.instance.createInbox();
+        await _refresh();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    }
   }
 
   @override
@@ -108,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
-                      onPressed: _newInbox,
+                      onPressed: _showNewInboxDialog, // modifié ici
                       icon: const Icon(Icons.refresh, size: 18),
                       label: const Text('Nouvelle adresse'),
                     ),
