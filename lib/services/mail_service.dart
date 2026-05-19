@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_service.dart';
 
 class MailService {
   MailService._();
@@ -13,6 +15,8 @@ class MailService {
   String? _address;
 
   String? get address => _address;
+
+  final _supabase = Supabase.instance.client;
 
   Future<List<String>> _domains() async {
     final r = await http.get(Uri.parse('$_base/domains'));
@@ -27,18 +31,71 @@ class MailService {
     return List.generate(n, (_) => chars[r.nextInt(chars.length)]).join();
   }
 
-  /// Crée une boîte avec une adresse aléatoire (comportement actuel)
+  /// Sauvegarde l'adresse email dans Supabase (table custom_emails)
+  Future<void> _saveEmailToSupabase(String emailAddress, bool isCustom) async {
+    final user = await AuthService.instance.currentUser();
+    if (user == null) return;
+    try {
+      // Récupérer l'id du profil (par email)
+      final profile = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', user['email'])
+          .maybeSingle();
+      if (profile != null) {
+        await _supabase.from('custom_emails').insert({
+          'user_id': profile['id'],
+          'email_address': emailAddress,
+          'is_custom': isCustom,
+        });
+      }
+    } catch (e) {
+      print("Erreur sauvegarde email dans Supabase: $e");
+    }
+  }
+
+  /// Sauvegarde un message dans l'historique Supabase
+  Future<void> _saveMessageToSupabase(Map<String, dynamic> message) async {
+    final user = await AuthService.instance.currentUser();
+    if (user == null) return;
+    try {
+      final profile = await _supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', user['email'])
+          .maybeSingle();
+      if (profile == null) return;
+
+      // Vérifier si le message existe déjà
+      final exists = await _supabase
+          .from('email_history')
+          .select()
+          .eq('user_id', profile['id'])
+          .eq('message_id', message['id'])
+          .maybeSingle();
+      if (exists == null) {
+        await _supabase.from('email_history').insert({
+          'user_id': profile['id'],
+          'message_id': message['id'],
+          'subject': message['subject'],
+          'from_address': message['from']?['address'],
+          'body': message['text'] ?? message['html'],
+          'received_at': message['createdAt'] ?? DateTime.now().toIso8601String(),
+        });
+      }
+    } catch (e) {
+      print("Erreur sauvegarde historique: $e");
+    }
+  }
+
   Future<String> createInbox() async {
     return _createInboxWithLocalPart(null);
   }
 
-  /// Crée une boîte avec une partie locale personnalisée
-  /// Lance une exception si l'adresse est déjà prise ou invalide
   Future<String> createInboxWithCustomLocalPart(String customLocalPart) async {
     if (customLocalPart.isEmpty) {
       throw Exception('Le nom local ne peut pas être vide');
     }
-    // Nettoyage simple : pas d'espaces, pas de caractères spéciaux sauf . et _
     final cleaned = customLocalPart.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]'), '');
     if (cleaned.isEmpty) {
       throw Exception('Nom local invalide (caractères autorisés : a-z 0-9 . _ -)');
@@ -46,7 +103,6 @@ class MailService {
     return _createInboxWithLocalPart(cleaned);
   }
 
-  /// Interne : si localPart est null → aléatoire
   Future<String> _createInboxWithLocalPart(String? localPart) async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('mail_session');
@@ -58,13 +114,12 @@ class MailService {
 
     final domains = await _domains();
     if (domains.isEmpty) throw Exception('Aucun domaine disponible');
-    final selectedDomain = domains.first; // tu peux aussi permettre à l'utilisateur de choisir
+    final selectedDomain = domains.first;
 
     final local = localPart ?? _rand(10);
     final address = '$local@$selectedDomain';
     final password = _rand(16);
 
-    // Tentative de création
     final createRes = await http.post(
       Uri.parse('$_base/accounts'),
       headers: {'Content-Type': 'application/json'},
@@ -72,9 +127,7 @@ class MailService {
     );
 
     if (createRes.statusCode == 422) {
-      // Adresse déjà prise ou invalide
-      final error = jsonDecode(createRes.body);
-      throw Exception('Adresse indisponible ou invalide. ${error['detail'] ?? ''}');
+      throw Exception('Adresse indisponible ou invalide.');
     }
     if (createRes.statusCode != 201) {
       throw Exception('Erreur lors de la création (${createRes.statusCode})');
@@ -82,7 +135,6 @@ class MailService {
 
     final acc = jsonDecode(createRes.body) as Map<String, dynamic>;
 
-    // Obtenir le token
     final tokenRes = await http.post(
       Uri.parse('$_base/token'),
       headers: {'Content-Type': 'application/json'},
@@ -96,6 +148,10 @@ class MailService {
     await prefs.setString('mail_session', jsonEncode({
       'token': _token, 'id': _accountId, 'address': _address,
     }));
+
+    // Sauvegarde dans Supabase
+    await _saveEmailToSupabase(address, localPart != null);
+
     return address;
   }
 
@@ -112,7 +168,13 @@ class MailService {
       headers: {'Authorization': 'Bearer $_token'},
     );
     final data = jsonDecode(r.body) as Map<String, dynamic>;
-    return (data['hydra:member'] as List).cast<Map<String, dynamic>>();
+    final messages = (data['hydra:member'] as List).cast<Map<String, dynamic>>();
+
+    // Sauvegarde chaque message dans Supabase (asynchrone, non bloquante)
+    for (final msg in messages) {
+      _saveMessageToSupabase(msg);
+    }
+    return messages;
   }
 
   Future<Map<String, dynamic>> getMessage(String id) async {

@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/about_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://ckhzttmzacsafkschtuv.supabase.co',
+    anonKey: 'sb_publishable_WvPEgzcKbzIVZvNGQKlwzA_uBRhGOkS',
+  );
   runApp(const OkitakoyMailApp());
 }
 
