@@ -36,46 +36,31 @@ class MailService {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
     try {
-      // Récupérer l'id du profil (par email)
-      final profile = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', user['email'])
-          .maybeSingle();
-      if (profile != null) {
-        await _supabase.from('custom_emails').insert({
-          'user_id': profile['id'],
-          'email_address': emailAddress,
-          'is_custom': isCustom,
-        });
-      }
+      await _supabase.from('custom_emails').insert({
+        'user_email': user['email'],   // correspond à profiles.email
+        'email_address': emailAddress,
+        'is_custom': isCustom,
+      });
     } catch (e) {
       print("Erreur sauvegarde email dans Supabase: $e");
     }
   }
 
-  /// Sauvegarde un message dans l'historique Supabase
+  /// Sauvegarde un message dans l'historique Supabase (table email_history)
   Future<void> _saveMessageToSupabase(Map<String, dynamic> message) async {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
     try {
-      final profile = await _supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', user['email'])
-          .maybeSingle();
-      if (profile == null) return;
-
-      // Vérifier si le message existe déjà
+      // Vérifier si le message existe déjà pour cet utilisateur
       final exists = await _supabase
           .from('email_history')
           .select()
-          .eq('user_id', profile['id'])
+          .eq('user_email', user['email'])
           .eq('message_id', message['id'])
           .maybeSingle();
       if (exists == null) {
         await _supabase.from('email_history').insert({
-          'user_id': profile['id'],
+          'user_email': user['email'],
           'message_id': message['id'],
           'subject': message['subject'],
           'from_address': message['from']?['address'],
@@ -149,8 +134,21 @@ class MailService {
       'token': _token, 'id': _accountId, 'address': _address,
     }));
 
-    // Sauvegarde dans Supabase
+    // Sauvegarde dans Supabase (email personnalisé ou aléatoire)
     await _saveEmailToSupabase(address, localPart != null);
+
+    // Mettre à jour mail_tm_id dans profiles
+    final user = await AuthService.instance.currentUser();
+    if (user != null) {
+      try {
+        await _supabase
+            .from('profiles')
+            .update({'mail_tm_id': _accountId})
+            .eq('email', user['email']);
+      } catch (e) {
+        print("Erreur mise à jour mail_tm_id: $e");
+      }
+    }
 
     return address;
   }

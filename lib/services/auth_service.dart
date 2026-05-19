@@ -38,10 +38,9 @@ class AuthService {
     await _storage.write(key: _kUsersKey, value: jsonEncode(users));
   }
 
-  /// Synchronise un utilisateur local avec Supabase (table public.profiles)
+  /// Synchronise un utilisateur local avec Supabase (table profiles)
   Future<void> _syncUserToSupabase(String email, String name) async {
     try {
-      // Vérifier si un profil existe déjà
       final existing = await _supabase
           .from('profiles')
           .select()
@@ -49,15 +48,11 @@ class AuthService {
           .maybeSingle();
 
       if (existing == null) {
-        // Créer le profil (l'id sera généré automatiquement par trigger ? Non, on utilise l'id de auth.users)
-        // On doit d'abord avoir un utilisateur dans auth.users. Ici on utilise l'email comme clé.
-        // Pour éviter la complexité, on insère avec un id fictif ? Mieux : on utilise l'email comme PK temporaire.
-        // Mais la table profiles attend une foreign key vers auth.users. On va modifier la table : supprimer la FK ou la rendre nullable.
-        // Solution rapide : on insère sans l'id (la colonne id est UUID NOT NULL). On va plutôt utiliser l'email comme PK.
-        // Pour l'instant, on contourne : on ne sync que si l'utilisateur existe déjà dans auth.users (via Supabase Auth).
-        // Comme on n'utilise pas Supabase Auth, on peut créer une table 'profiles' sans FK.
-        // Je vais plutôt créer une fonction SQL plus tard. Ici on va juste logger.
-        print("Sync Supabase non implémentée car pas d'utilisateur Supabase Auth. Créez un trigger SQL.");
+        // Créer le profil avec email comme clé primaire
+        await _supabase.from('profiles').insert({
+          'email': email,
+          'full_name': name,
+        });
       } else {
         // Mettre à jour le nom
         await _supabase
