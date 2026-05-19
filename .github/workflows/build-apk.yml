@@ -44,6 +44,24 @@ jobs:
           flutter pub get
           dart run flutter_launcher_icons
 
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Patch app_links build.gradle
+        run: |
+          APP_LINKS_DIR=$(find $HOME/.pub-cache/hosted -type d -name "app_links-6.4.1" 2>/dev/null | head -1)
+          if [ -n "$APP_LINKS_DIR" ]; then
+            echo "Patching app_links build.gradle in $APP_LINKS_DIR"
+            cd "$APP_LINKS_DIR/android"
+            if ! grep -q "flutter {" build.gradle; then
+              echo -e "\nflutter {\n    source '../..'\n}" >> build.gradle
+            fi
+            sed -i 's/flutter\.versionName/"1.0"/g' build.gradle
+            sed -i 's/flutter\.versionCode/1/g' build.gradle
+          else
+            echo "app_links directory not found, skipping patch"
+          fi
+
       - name: Build signed APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
