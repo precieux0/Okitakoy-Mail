@@ -36,13 +36,14 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = false);
   }
 
+  // mail.tm aléatoire
   Future<void> _createRandomMailbox() async {
     setState(() => _loading = true);
     try {
       await _mailService.createMailTmMailbox();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Boîte aléatoire créée !')),
+          const SnackBar(content: Text('Boîte aléatoire (mail.tm) créée !')),
         );
         await _refreshMessages();
       }
@@ -57,13 +58,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // mail.tm personnalisé
   Future<void> _createCustomMailbox() async {
     final TextEditingController controller = TextEditingController();
     final result = await showDialog<String>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Adresse personnalisée'),
+          title: const Text('Adresse personnalisée (mail.tm)'),
           content: TextField(
             controller: controller,
             decoration: const InputDecoration(
@@ -104,6 +106,28 @@ class _HomeScreenState extends State<HomeScreen> {
       } finally {
         if (mounted) setState(() => _loading = false);
       }
+    }
+  }
+
+  // Guerrilla Mail (aléatoire)
+  Future<void> _createGuerrillaMailbox() async {
+    setState(() => _loading = true);
+    try {
+      await _mailService.createGuerrillaMailbox();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Boîte Guerrilla Mail créée !')),
+        );
+        await _refreshMessages();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur : $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -149,6 +173,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 _createRandomMailbox();
               } else if (value == 'custom') {
                 _createCustomMailbox();
+              } else if (value == 'guerrilla') {
+                _createGuerrillaMailbox();
               }
             },
             itemBuilder: (context) => [
@@ -159,6 +185,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const PopupMenuItem(
                 value: 'custom',
                 child: Text('Adresse personnalisée (mail.tm)'),
+              ),
+              const PopupMenuItem(
+                value: 'guerrilla',
+                child: Text('Adresse Guerrilla Mail'),
               ),
             ],
           ),

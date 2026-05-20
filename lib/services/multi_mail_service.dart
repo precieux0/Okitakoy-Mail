@@ -1,9 +1,7 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:mailtm_client/mailtm_client.dart';
-import 'package:guerrilla_mail_api/guerrilla_mail_api.dart';
 import '../main.dart';
 import 'auth_service.dart';
+import 'guerrilla_mail_service.dart';
 
 class MailboxInfo {
   final String id;
@@ -63,6 +61,8 @@ class MultiMailService {
   final List<MailboxInfo> _mailboxes = [];
   List<MailboxInfo> get mailboxes => List.unmodifiable(_mailboxes);
 
+  final GuerrillaMailService _guerrilla = GuerrillaMailService();
+
   Future<void> loadMailboxesFromSupabase() async {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
@@ -76,11 +76,6 @@ class MultiMailService {
     }
   }
 
-  void addMailbox(MailboxInfo mailbox) {
-    _mailboxes.add(mailbox);
-    _saveMailboxToSupabase(mailbox);
-  }
-
   Future<void> _saveMailboxToSupabase(MailboxInfo mailbox) async {
     final user = await AuthService.instance.currentUser();
     if (user == null) return;
@@ -90,16 +85,12 @@ class MultiMailService {
       'email_address': mailbox.email,
       'provider': mailbox.provider,
       'token': mailbox.token,
-      'is_custom': true, // ou selon le cas
+      'is_custom': true,
       'created_at': mailbox.createdAt.toIso8601String(),
     });
   }
 
-  void removeMailbox(String id) {
-    _mailboxes.removeWhere((m) => m.id == id);
-    supabase.from('user_mailboxes').delete().eq('id', id);
-  }
-
+  // mail.tm - aléatoire
   Future<MailboxInfo> createMailTmMailbox() async {
     final mailTm = MailTm();
     final domain = await mailTm.getRandomDomain();
@@ -117,14 +108,16 @@ class MultiMailService {
       token: token,
       createdAt: DateTime.now(),
     );
-    addMailbox(mailbox);
+    _mailboxes.add(mailbox);
+    await _saveMailboxToSupabase(mailbox);
     return mailbox;
   }
 
+  // mail.tm - personnalisé
   Future<MailboxInfo> createCustomMailTmMailbox(String customLocalPart) async {
     final cleaned = customLocalPart.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]'), '');
     if (cleaned.isEmpty) {
-      throw Exception('Nom personnalisé invalide. Utilisez a-z, 0-9, point, tiret, underscore.');
+      throw Exception('Nom personnalisé invalide.');
     }
 
     final mailTm = MailTm();
@@ -144,16 +137,17 @@ class MultiMailService {
         token: token,
         createdAt: DateTime.now(),
       );
-      addMailbox(mailbox);
+      _mailboxes.add(mailbox);
+      await _saveMailboxToSupabase(mailbox);
       return mailbox;
     } catch (e) {
-      throw Exception('Le nom "$cleaned" n\'est pas disponible. Veuillez en choisir un autre.');
+      throw Exception('Le nom "$cleaned" n\'est pas disponible.');
     }
   }
 
+  // Guerrilla Mail
   Future<MailboxInfo> createGuerrillaMailbox() async {
-    final api = GuerrillaMailApi();
-    final email = await api.getEmailAddress();
+    final email = await _guerrilla.getEmailAddress();
     final mailbox = MailboxInfo(
       id: email.split('@').first,
       email: email,
@@ -161,7 +155,8 @@ class MultiMailService {
       token: '',
       createdAt: DateTime.now(),
     );
-    addMailbox(mailbox);
+    _mailboxes.add(mailbox);
+    await _saveMailboxToSupabase(mailbox);
     return mailbox;
   }
 
@@ -194,15 +189,14 @@ class MultiMailService {
         receivedAt: msg.createdAt,
       )).toList();
     } else if (mailbox.provider == 'guerrillamail') {
-      final api = GuerrillaMailApi();
-      final emails = await api.checkEmail();
-      return emails.map((email) => MessageInfo(
-        id: email.mailId.toString(),
+      final emails = await _guerrilla.fetchEmails();
+      return emails.map((e) => MessageInfo(
+        id: e['id'],
         mailboxId: mailbox.id,
-        subject: email.mailSubject,
-        from: email.mailFrom,
-        body: email.mailBody,
-        receivedAt: DateTime.now(),
+        subject: e['subject'],
+        from: e['from'],
+        body: e['body'],
+        receivedAt: DateTime.parse(e['received_at']),
       )).toList();
     }
     return [];
