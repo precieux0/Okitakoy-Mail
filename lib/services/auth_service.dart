@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../main.dart';
 
@@ -7,6 +9,9 @@ class AuthService {
 
   final _storage = const FlutterSecureStorage();
   static const String _kUserKey = 'current_user';
+
+  final String _supabaseUrl = 'https://ckhzttmzacsafkschtuv.supabase.co';
+  final String _supabaseAnonKey = 'sb_publishable_WvPEgzcKbzIVZvNGQKlwzA_uBRhGOkS';
 
   Future<Map<String, dynamic>?> currentUser() async {
     try {
@@ -30,25 +35,39 @@ class AuthService {
     await _storage.delete(key: _kUserKey);
   }
 
+  // Utilisation directe de l'API REST pour l'inscription
   Future<void> signUpEmail(String email, String password, String name) async {
     if (email.isEmpty || password.isEmpty || name.isEmpty) {
       throw Exception('Tous les champs sont obligatoires.');
     }
+    final url = Uri.parse('$_supabaseUrl/auth/v1/signup');
+    final headers = {
+      'apikey': _supabaseAnonKey,
+      'Content-Type': 'application/json',
+    };
+    final body = jsonEncode({
+      'email': email,
+      'password': password,
+      'data': {'full_name': name},
+    });
     try {
-      final response = await supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {'full_name': name},
-      );
-      // Vérification : si une session est présente, l'utilisateur est connecté
-      if (response.session != null) {
-        return; // succès sans message
-      } else if (response.user != null) {
-        // L'utilisateur est créé mais pas de session (confirmation email activée)
-        throw Exception('Inscription réussie ! Veuillez confirmer votre email.');
+      final response = await http.post(url, headers: headers, body: body);
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        if (data['session'] != null) {
+          // Connecter automatiquement la session dans le SDK
+          await supabase.auth.setSession(
+            accessToken: data['session']['access_token'],
+            refreshToken: data['session']['refresh_token'],
+          );
+        } else if (data['user'] != null) {
+          throw Exception('Inscription réussie ! Veuillez confirmer votre email.');
+        } else {
+          throw Exception('Erreur inconnue lors de l\'inscription.');
+        }
       } else {
-        // Aucun utilisateur ni session -> erreur (ex: email déjà utilisé)
-        throw Exception('Erreur lors de l\'inscription. Vérifiez votre email ou mot de passe.');
+        String errorMsg = data['error_description'] ?? data['msg'] ?? 'Erreur serveur.';
+        throw Exception(errorMsg);
       }
     } catch (e) {
       throw Exception('Erreur lors de l\'inscription : ${e.toString()}');
