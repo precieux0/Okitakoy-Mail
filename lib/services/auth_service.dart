@@ -8,7 +8,6 @@ class AuthService {
   final _storage = const FlutterSecureStorage();
   static const String _kUserKey = 'current_user';
 
-  /// Récupère l'utilisateur actuellement connecté (depuis Supabase)
   Future<Map<String, dynamic>?> currentUser() async {
     final session = supabase.auth.currentSession;
     if (session == null) return null;
@@ -21,13 +20,11 @@ class AuthService {
     };
   }
 
-  /// Déconnexion (Supabase + nettoyage local)
   Future<void> signOut() async {
     await supabase.auth.signOut();
     await _storage.delete(key: _kUserKey);
   }
 
-  /// Inscription avec email/mot de passe
   Future<void> signUpEmail(String email, String password, String name) async {
     try {
       await supabase.auth.signUp(
@@ -40,7 +37,6 @@ class AuthService {
     }
   }
 
-  /// Connexion avec email/mot de passe
   Future<void> signInEmail(String email, String password) async {
     try {
       await supabase.auth.signInWithPassword(email: email, password: password);

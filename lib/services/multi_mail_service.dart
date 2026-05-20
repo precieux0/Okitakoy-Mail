@@ -35,24 +35,6 @@ class MailboxInfo {
   );
 }
 
-class MessageInfo {
-  final String id;
-  final String mailboxId;
-  final String subject;
-  final String from;
-  final String body;
-  final DateTime receivedAt;
-
-  MessageInfo({
-    required this.id,
-    required this.mailboxId,
-    required this.subject,
-    required this.from,
-    required this.body,
-    required this.receivedAt,
-  });
-}
-
 class MultiMailService {
   static final MultiMailService _instance = MultiMailService._internal();
   factory MultiMailService() => _instance;
@@ -60,7 +42,6 @@ class MultiMailService {
 
   final List<MailboxInfo> _mailboxes = [];
   List<MailboxInfo> get mailboxes => List.unmodifiable(_mailboxes);
-
   final GuerrillaMailService _guerrilla = GuerrillaMailService();
 
   Future<void> loadMailboxesFromSupabase() async {
@@ -90,7 +71,7 @@ class MultiMailService {
     });
   }
 
-  // mail.tm - aléatoire
+  // ----- mail.tm random -----
   Future<MailboxInfo> createMailTmMailbox() async {
     final mailTm = MailTm();
     final domain = await mailTm.getRandomDomain();
@@ -113,17 +94,15 @@ class MultiMailService {
     return mailbox;
   }
 
-  // mail.tm - personnalisé
+  // ----- mail.tm custom -----
   Future<MailboxInfo> createCustomMailTmMailbox(String customLocalPart) async {
     final cleaned = customLocalPart.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]'), '');
     if (cleaned.isEmpty) {
       throw Exception('Nom personnalisé invalide.');
     }
-
     final mailTm = MailTm();
     final domain = await mailTm.getRandomDomain();
     final password = _generatePassword();
-
     try {
       final account = await mailTm.createAccount(
         address: '$cleaned@$domain',
@@ -145,12 +124,34 @@ class MultiMailService {
     }
   }
 
-  // Guerrilla Mail
+  // ----- Guerrilla Mail random -----
   Future<MailboxInfo> createGuerrillaMailbox() async {
     final email = await _guerrilla.getEmailAddress();
     final mailbox = MailboxInfo(
       id: email.split('@').first,
       email: email,
+      provider: 'guerrillamail',
+      token: '',
+      createdAt: DateTime.now(),
+    );
+    _mailboxes.add(mailbox);
+    await _saveMailboxToSupabase(mailbox);
+    return mailbox;
+  }
+
+  // ----- Guerrilla Mail custom -----
+  Future<MailboxInfo> createCustomGuerrillaMailbox(String customLocalPart) async {
+    final cleaned = customLocalPart.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (cleaned.isEmpty) {
+      throw Exception('Nom personnalisé invalide (lettres/chiffres uniquement).');
+    }
+    // D'abord créer une adresse aléatoire (initialise la session)
+    await _guerrilla.getEmailAddress();
+    // Puis personnaliser
+    final customEmail = await _guerrilla.setCustomEmailUser(cleaned);
+    final mailbox = MailboxInfo(
+      id: customEmail.split('@').first,
+      email: customEmail,
       provider: 'guerrillamail',
       token: '',
       createdAt: DateTime.now(),
@@ -189,6 +190,8 @@ class MultiMailService {
         receivedAt: msg.createdAt,
       )).toList();
     } else if (mailbox.provider == 'guerrillamail') {
+      // Pour Guerrilla Mail, on a besoin de restaurer la session
+      // On utilise le token stocké ? Pas nécessaire car on utilise SharedPreferences
       final emails = await _guerrilla.fetchEmails();
       return emails.map((e) => MessageInfo(
         id: e['id'],
@@ -213,4 +216,22 @@ class MultiMailService {
     final random = DateTime.now().microsecond;
     return List.generate(10, (_) => chars[random % chars.length]).join();
   }
+}
+
+class MessageInfo {
+  final String id;
+  final String mailboxId;
+  final String subject;
+  final String from;
+  final String body;
+  final DateTime receivedAt;
+
+  MessageInfo({
+    required this.id,
+    required this.mailboxId,
+    required this.subject,
+    required this.from,
+    required this.body,
+    required this.receivedAt,
+  });
 }
