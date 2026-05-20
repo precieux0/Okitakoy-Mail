@@ -9,16 +9,20 @@ class AuthService {
   static const String _kUserKey = 'current_user';
 
   Future<Map<String, dynamic>?> currentUser() async {
-    final session = supabase.auth.currentSession;
-    if (session == null) return null;
-    final user = session.user;
-    if (user == null) return null;
-    return {
-      'email': user.email,
-      'name': user.userMetadata?['full_name'] ?? user.email,
-      'provider': 'supabase',
-      'id': user.id,
-    };
+    try {
+      final session = supabase.auth.currentSession;
+      if (session == null) return null;
+      final user = session.user;
+      if (user == null) return null;
+      return {
+        'email': user.email,
+        'name': user.userMetadata?['full_name'] ?? user.email,
+        'provider': 'supabase',
+        'id': user.id,
+      };
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<void> signOut() async {
@@ -36,16 +40,17 @@ class AuthService {
         password: password,
         data: {'full_name': name},
       );
-      // Si la confirmation par email est activée, response.user et response.session sont null
-      // Mais l'utilisateur a bien été créé.
-      if (response.user == null && response.session == null) {
-        // On lève une exception avec un message clair pour l'utilisateur
-        throw Exception('Un email de confirmation vous a été envoyé. Veuillez vérifier votre boîte de réception.');
+      // Vérification : si une session est présente, l'utilisateur est connecté
+      if (response.session != null) {
+        return; // succès sans message
+      } else if (response.user != null) {
+        // L'utilisateur est créé mais pas de session (confirmation email activée)
+        throw Exception('Inscription réussie ! Veuillez confirmer votre email.');
+      } else {
+        // Aucun utilisateur ni session -> erreur (ex: email déjà utilisé)
+        throw Exception('Erreur lors de l\'inscription. Vérifiez votre email ou mot de passe.');
       }
-      // Si une session est retournée (confirmation désactivée), on est déjà connecté
-      // Le SDK gère automatiquement la session.
     } catch (e) {
-      // Ré-émettre l'erreur avec un message compréhensible
       throw Exception('Erreur lors de l\'inscription : ${e.toString()}');
     }
   }
