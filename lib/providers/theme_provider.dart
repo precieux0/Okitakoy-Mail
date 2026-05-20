@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;  // ← thème clair par défaut
   static const String _themeKey = 'theme_mode';
 
   ThemeProvider() {
@@ -13,8 +13,12 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    final themeIndex = prefs.getInt(_themeKey) ?? 2;
-    _themeMode = ThemeMode.values[themeIndex];
+    final themeIndex = prefs.getInt(_themeKey);
+    if (themeIndex != null) {
+      _themeMode = ThemeMode.values[themeIndex];
+    } else {
+      _themeMode = ThemeMode.light; // par sécurité
+    }
     notifyListeners();
   }
 
@@ -31,7 +35,7 @@ class ThemeProvider extends ChangeNotifier {
     } else if (_themeMode == ThemeMode.dark) {
       setThemeMode(ThemeMode.light);
     } else {
-      setThemeMode(ThemeMode.light);
+      setThemeMode(ThemeMode.light); // si système, on passe en clair
     }
   }
 }
