@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../main.dart';
 
@@ -8,79 +6,46 @@ class AuthService {
   static final instance = AuthService._();
 
   final _storage = const FlutterSecureStorage();
+  static const String _kUserKey = 'current_user';
 
-  static const _kUserKey = 'current_user';
-  static const _kUsersKey = 'users_db';
-
+  /// Récupère l'utilisateur actuellement connecté (depuis Supabase)
   Future<Map<String, dynamic>?> currentUser() async {
-    final raw = await _storage.read(key: _kUserKey);
-    if (raw == null) return null;
-    return jsonDecode(raw) as Map<String, dynamic>;
+    final session = supabase.auth.currentSession;
+    if (session == null) return null;
+    final user = session.user;
+    return {
+      'email': user.email,
+      'name': user.userMetadata?['full_name'] ?? user.email,
+      'provider': 'supabase',
+      'id': user.id,
+    };
   }
 
+  /// Déconnexion (Supabase + nettoyage local)
   Future<void> signOut() async {
+    await supabase.auth.signOut();
     await _storage.delete(key: _kUserKey);
   }
 
-  String _hash(String pwd) =>
-      sha256.convert(utf8.encode('okitakoy::$pwd')).toString();
-
-  Future<Map<String, List<String>>> _users() async {
-    final raw = await _storage.read(key: _kUsersKey);
-    if (raw == null) return {};
-    final m = jsonDecode(raw) as Map<String, dynamic>;
-    return m.map((k, v) => MapEntry(k, List<String>.from(v as List)));
-  }
-
-  Future<void> _saveUsers(Map<String, List<String>> users) async {
-    await _storage.write(key: _kUsersKey, value: jsonEncode(users));
-  }
-
-  Future<void> _syncUserToSupabase(String email, String name) async {
-    try {
-      final existing = await supabase
-          .from('profiles')
-          .select()
-          .eq('email', email)
-          .maybeSingle();
-      if (existing == null) {
-        await supabase.from('profiles').insert({
-          'email': email,
-          'full_name': name,
-        });
-      } else {
-        await supabase
-            .from('profiles')
-            .update({'full_name': name})
-            .eq('email', email);
-      }
-    } catch (e) {
-      print("Erreur sync Supabase: $e");
-    }
-  }
-
+  /// Inscription avec email/mot de passe
   Future<void> signUpEmail(String email, String password, String name) async {
-    final users = await _users();
-    if (users.containsKey(email)) {
-      throw Exception('Un compte existe déjà avec cet e-mail.');
+    try {
+      await supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': name},
+      );
+    } catch (e) {
+      throw Exception('Erreur lors de l\'inscription : $e');
     }
-    users[email] = [_hash(password), name];
-    await _saveUsers(users);
-    await _setUser({'email': email, 'name': name, 'provider': 'email'});
-    await _syncUserToSupabase(email, name);
   }
 
+  /// Connexion avec email/mot de passe
   Future<void> signInEmail(String email, String password) async {
-    final users = await _users();
-    final entry = users[email];
-    if (entry == null || entry[0] != _hash(password)) {
-      throw Exception('Identifiants invalides.');
+    try {
+      await supabase.auth.signInWithPassword(email: email, password: password);
+    } catch (e) {
+      throw Exception('Email ou mot de passe incorrect.');
     }
-    await _setUser({'email': email, 'name': entry[1], 'provider': 'email'});
-    await _syncUserToSupabase(email, entry[1]);
-  }
-
-  Future<void> _setUser(Map<String, dynamic> u) async {
-    await _storage.write(key: _kUserKey, value: jsonEncode(u));
   }
 }
