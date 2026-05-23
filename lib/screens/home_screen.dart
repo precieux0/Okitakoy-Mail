@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
-import '../services/auth_service.dart';
 import '../services/multi_mail_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,20 +12,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final MultiMailService _mailService = MultiMailService();
-  Map<String, dynamic>? _user;
   List<Map<String, dynamic>> _messages = [];
   bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
     _loadMailboxes();
-  }
-
-  Future<void> _loadUser() async {
-    final user = await AuthService.instance.currentUser();
-    setState(() => _user = user);
   }
 
   Future<void> _loadMailboxes() async {
@@ -240,25 +232,12 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.info_outline),
             onPressed: () => Navigator.pushNamed(context, '/about'),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await AuthService.instance.signOut();
-              if (mounted) Navigator.pushReplacementNamed(context, '/login');
-            },
-          ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _refreshMessages,
         child: Column(
           children: [
-            if (_user != null)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('Bonjour ${_user!['name'] ?? ''} 👋',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())

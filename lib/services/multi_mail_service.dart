@@ -1,5 +1,4 @@
 import '../main.dart';
-import 'auth_service.dart';
 import 'guerrilla_mail_service.dart';
 import 'mailtm_service.dart';
 
@@ -64,13 +63,33 @@ class MultiMailService {
   final GuerrillaMailService _guerrilla = GuerrillaMailService();
   final MailTmService _mailTm = MailTmService();
 
+  // ID utilisateur fixe pour stockage anonyme dans Supabase
+  static const String _anonymousUserId = '00000000-0000-0000-0000-000000000000';
+  static const String _anonymousUserEmail = 'anonymous@okitakoy.mail';
+
+  Future<void> _ensureAnonymousUser() async {
+    // Vérifier si l'utilisateur anonyme existe dans la table profiles
+    final existing = await supabase
+        .from('profiles')
+        .select()
+        .eq('id', _anonymousUserId)
+        .maybeSingle();
+    if (existing == null) {
+      // Créer l'utilisateur anonyme
+      await supabase.from('profiles').insert({
+        'id': _anonymousUserId,
+        'email': _anonymousUserEmail,
+        'full_name': 'Anonyme',
+      });
+    }
+  }
+
   Future<void> loadMailboxesFromSupabase() async {
-    final user = await AuthService.instance.currentUser();
-    if (user == null) return;
+    await _ensureAnonymousUser();
     final data = await supabase
         .from('user_mailboxes')
         .select()
-        .eq('user_id', user['id']);
+        .eq('user_id', _anonymousUserId);
     _mailboxes.clear();
     for (var row in data) {
       _mailboxes.add(MailboxInfo.fromJson(row));
@@ -78,11 +97,9 @@ class MultiMailService {
   }
 
   Future<void> _saveMailboxToSupabase(MailboxInfo mailbox) async {
-    final user = await AuthService.instance.currentUser();
-    if (user == null) return;
     await supabase.from('user_mailboxes').upsert({
       'id': mailbox.id,
-      'user_id': user['id'],
+      'user_id': _anonymousUserId,
       'email_address': mailbox.email,
       'provider': mailbox.provider,
       'token': mailbox.token,

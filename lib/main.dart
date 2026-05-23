@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:supabase/supabase.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/signup_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/about_screen.dart';
 
@@ -106,8 +104,6 @@ class OkitakoyMailApp extends StatelessWidget {
             initialRoute: '/',
             routes: {
               '/': (_) => const SplashScreen(),
-              '/login': (_) => const LoginScreen(),
-              '/signup': (_) => const SignupScreen(),
               '/home': (_) => const HomeScreen(),
               '/about': (_) => const AboutScreen(),
             },

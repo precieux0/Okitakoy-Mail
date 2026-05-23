@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -17,9 +16,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _bootstrap() async {
     await Future.delayed(const Duration(milliseconds: 600));
-    final user = await AuthService.instance.currentUser();
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, user == null ? '/login' : '/home');
+    Navigator.pushReplacementNamed(context, '/home');
   }
 
   @override
