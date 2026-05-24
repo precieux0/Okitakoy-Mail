@@ -61,12 +61,11 @@ class MultiMailService {
     await LocalStorageService.saveMailboxes(jsonList);
   }
 
-  // Sauvegarde des messages d'une boîte
   Future<void> _saveMessages(String mailboxId, List<Map<String, dynamic>> messages) async {
     await LocalStorageService.saveMessages(mailboxId, messages);
   }
 
-  // Récupération des messages depuis l'API externe + mise en cache local
+  // Récupération des messages depuis l'API externe + mise en cache
   Future<List<Map<String, dynamic>>> fetchAndCacheMessages(MailboxInfo mailbox) async {
     List<Map<String, dynamic>> freshMessages = [];
     if (mailbox.provider == 'mail.tm') {
@@ -79,7 +78,7 @@ class MultiMailService {
         'received_at': msg['received_at'],
       }).toList();
     } else if (mailbox.provider == 'guerrillamail') {
-      final emails = await _guerrilla.fetchEmails();
+      final emails = await _guerrilla.fetchAllEmails();
       freshMessages = emails.map((e) => {
         'id': e['id'],
         'subject': e['subject'],
@@ -88,7 +87,7 @@ class MultiMailService {
         'received_at': e['received_at'],
       }).toList();
     }
-    // Mettre en cache
+    // Mettre en cache local
     await _saveMessages(mailbox.id, freshMessages);
     return freshMessages;
   }
@@ -162,6 +161,8 @@ class MultiMailService {
     );
     _mailboxes.add(mailbox);
     await _saveMailboxes();
+    // Récupération immédiate des messages pour initialiser le cache
+    await fetchAndCacheMessages(mailbox);
     return mailbox;
   }
 
@@ -171,7 +172,8 @@ class MultiMailService {
     if (cleaned.isEmpty) {
       throw Exception('Nom personnalisé invalide (lettres/chiffres uniquement).');
     }
-    await _guerrilla.getEmailAddress(); // init session
+    // Créer une adresse aléatoire (initialise la session)
+    await _guerrilla.getEmailAddress();
     final customEmail = await _guerrilla.setCustomEmailUser(cleaned);
     final mailbox = MailboxInfo(
       id: customEmail.split('@').first,
@@ -182,6 +184,7 @@ class MultiMailService {
     );
     _mailboxes.add(mailbox);
     await _saveMailboxes();
+    await fetchAndCacheMessages(mailbox);
     return mailbox;
   }
 
