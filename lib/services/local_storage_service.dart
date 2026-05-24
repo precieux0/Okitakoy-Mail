@@ -37,7 +37,7 @@ class LocalStorageService {
     return List<Map<String, dynamic>>.from(jsonDecode(jsonString));
   }
 
-  // Exporter toutes les données (backup)
+  // Exporter toutes les données (backup) dans le dossier Downloads ou Documents
   static Future<String> exportBackup() async {
     final mailboxes = await loadMailboxes();
     final Map<String, dynamic> backup = {
@@ -45,14 +45,27 @@ class LocalStorageService {
       'exportDate': DateTime.now().toIso8601String(),
       'mailboxes': mailboxes,
     };
-    // Pour chaque boîte, ajouter ses messages
+    // Ajouter les messages de chaque boîte
     for (var mb in mailboxes) {
       final messages = await loadMessages(mb['id']);
       backup['messages_${mb['id']}'] = messages;
     }
     final jsonString = jsonEncode(backup);
-    final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/okitakoy_backup.json');
+    
+    // Choisir le répertoire : Downloads si disponible, sinon Documents
+    Directory outputDir;
+    try {
+      final downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir != null) {
+        outputDir = downloadsDir;
+      } else {
+        outputDir = await getApplicationDocumentsDirectory();
+      }
+    } catch (e) {
+      outputDir = await getApplicationDocumentsDirectory();
+    }
+    final fileName = 'okitakoy_backup_${DateTime.now().millisecondsSinceEpoch}.json';
+    final file = File('${outputDir.path}/$fileName');
     await file.writeAsString(jsonString);
     return file.path;
   }

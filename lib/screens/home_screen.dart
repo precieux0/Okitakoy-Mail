@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,6 +16,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final MultiMailService _mailService = MultiMailService();
+  List<MailboxInfo> _mailboxes = [];
   List<Map<String, dynamic>> _messages = [];
   bool _loading = false;
 
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     await _mailService.loadMailboxesFromLocal();
+    _mailboxes = List.from(_mailService.mailboxes);
     await _refreshMessages();
     setState(() => _loading = false);
   }
@@ -35,11 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     try {
       await _mailService.createMailTmMailbox();
+      await _loadData(); // recharger les boîtes
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Boîte aléatoire (mail.tm) créée !')),
         );
-        await _refreshMessages();
       }
     } catch (e) {
       _showError(e);
@@ -77,11 +80,11 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _loading = true);
       try {
         await _mailService.createCustomMailTmMailbox(result);
+        await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Adresse personnalisée (mail.tm) créée !')),
           );
-          await _refreshMessages();
         }
       } catch (e) {
         _showError(e);
@@ -95,11 +98,11 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     try {
       await _mailService.createGuerrillaMailbox();
+      await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Boîte Guerrilla Mail créée !')),
         );
-        await _refreshMessages();
       }
     } catch (e) {
       _showError(e);
@@ -137,11 +140,11 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _loading = true);
       try {
         await _mailService.createCustomGuerrillaMailbox(result);
+        await _loadData();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Adresse Guerrilla Mail personnalisée créée !')),
           );
-          await _refreshMessages();
         }
       } catch (e) {
         _showError(e);
@@ -179,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
       FilePickerResult? result = await FilePicker.platform.pickFiles();
       if (result != null && result.files.single.path != null) {
         await LocalStorageService.importBackup(result.files.single.path!);
-        await _loadData(); // recharger tout
+        await _loadData();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Backup importé avec succès')),
         );
@@ -195,6 +198,13 @@ class _HomeScreenState extends State<HomeScreen> {
         SnackBar(content: Text('Erreur : $e')),
       );
     }
+  }
+
+  void _copyToClipboard(String text) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Adresse copiée !')),
+    );
   }
 
   @override
@@ -262,55 +272,100 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: _refreshMessages,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _messages.isEmpty
-                ? const Center(child: Text('Aucun message pour le moment'))
-                : ListView.builder(
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final msg = _messages[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: ListTile(
-                          title: Text(msg['subject'] ?? '(sans objet)',
-                              style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(msg['from'] ?? ''),
-                              Text(msg['mailbox'] ?? '',
-                                  style: const TextStyle(fontSize: 10)),
-                            ],
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              builder: (_) => Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(msg['subject'] ?? '(sans objet)',
-                                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                                      const SizedBox(height: 6),
-                                      Text('De : ${msg['from'] ?? ''}',
-                                          style: const TextStyle(color: Color(0xFF64748B))),
-                                      Text('Boîte : ${msg['mailbox'] ?? ''}',
-                                          style: const TextStyle(color: Color(0xFF64748B))),
-                                      const SizedBox(height: 16),
-                                      Text(msg['body'] ?? ''),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    },
+            : CustomScrollView(
+                slivers: [
+                  // Sliver pour la liste des boîtes
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Mes adresses',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          if (_mailboxes.isEmpty)
+                            const Text('Aucune adresse créée pour le moment.',
+                                style: TextStyle(color: Colors.grey))
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _mailboxes.map((mb) => Chip(
+                                label: Text(mb.email),
+                                deleteIcon: const Icon(Icons.copy, size: 18),
+                                onDeleted: () => _copyToClipboard(mb.email),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              )).toList(),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
+                  // Sliver pour les messages
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('Messages reçus',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  if (_messages.isEmpty)
+                    const SliverToBoxAdapter(
+                      child: Center(child: Text('Aucun message pour le moment')),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final msg = _messages[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            child: ListTile(
+                              title: Text(msg['subject'] ?? '(sans objet)',
+                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(msg['from'] ?? ''),
+                                  Text(msg['mailbox'] ?? '',
+                                      style: const TextStyle(fontSize: 10)),
+                                ],
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(msg['subject'] ?? '(sans objet)',
+                                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                                          const SizedBox(height: 6),
+                                          Text('De : ${msg['from'] ?? ''}',
+                                              style: const TextStyle(color: Color(0xFF64748B))),
+                                          Text('Boîte : ${msg['mailbox'] ?? ''}',
+                                              style: const TextStyle(color: Color(0xFF64748B))),
+                                          const SizedBox(height: 16),
+                                          Text(msg['body'] ?? ''),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                        childCount: _messages.length,
+                      ),
+                    ),
+                ],
+              ),
       ),
     );
   }
