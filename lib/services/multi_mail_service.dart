@@ -1,6 +1,9 @@
-import '../main.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'guerrilla_mail_service.dart';
 import 'mailtm_service.dart';
+import 'local_storage_service.dart';
 
 class MailboxInfo {
   final String id;
@@ -19,7 +22,7 @@ class MailboxInfo {
 
   Map<String, dynamic> toJson() => {
     'id': id,
-    'email_address': email,
+    'email': email,
     'provider': provider,
     'token': token,
     'created_at': createdAt.toIso8601String(),
@@ -27,29 +30,11 @@ class MailboxInfo {
 
   factory MailboxInfo.fromJson(Map<String, dynamic> json) => MailboxInfo(
     id: json['id'],
-    email: json['email_address'],
+    email: json['email'],
     provider: json['provider'],
     token: json['token'] ?? '',
     createdAt: DateTime.parse(json['created_at']),
   );
-}
-
-class MessageInfo {
-  final String id;
-  final String mailboxId;
-  final String subject;
-  final String from;
-  final String body;
-  final DateTime receivedAt;
-
-  MessageInfo({
-    required this.id,
-    required this.mailboxId,
-    required this.subject,
-    required this.from,
-    required this.body,
-    required this.receivedAt,
-  });
 }
 
 class MultiMailService {
@@ -63,49 +48,57 @@ class MultiMailService {
   final GuerrillaMailService _guerrilla = GuerrillaMailService();
   final MailTmService _mailTm = MailTmService();
 
-  // ID utilisateur fixe pour stockage anonyme dans Supabase
-  static const String _anonymousUserId = '00000000-0000-0000-0000-000000000000';
-  static const String _anonymousUserEmail = 'anonymous@okitakoy.mail';
-
-  Future<void> _ensureAnonymousUser() async {
-    // Vérifier si l'utilisateur anonyme existe dans la table profiles
-    final existing = await supabase
-        .from('profiles')
-        .select()
-        .eq('id', _anonymousUserId)
-        .maybeSingle();
-    if (existing == null) {
-      // Créer l'utilisateur anonyme
-      await supabase.from('profiles').insert({
-        'id': _anonymousUserId,
-        'email': _anonymousUserEmail,
-        'full_name': 'Anonyme',
-      });
-    }
-  }
-
-  Future<void> loadMailboxesFromSupabase() async {
-    await _ensureAnonymousUser();
-    final data = await supabase
-        .from('user_mailboxes')
-        .select()
-        .eq('user_id', _anonymousUserId);
+  Future<void> loadMailboxesFromLocal() async {
+    final jsonList = await LocalStorageService.loadMailboxes();
     _mailboxes.clear();
-    for (var row in data) {
-      _mailboxes.add(MailboxInfo.fromJson(row));
+    for (var json in jsonList) {
+      _mailboxes.add(MailboxInfo.fromJson(json));
     }
   }
 
-  Future<void> _saveMailboxToSupabase(MailboxInfo mailbox) async {
-    await supabase.from('user_mailboxes').upsert({
-      'id': mailbox.id,
-      'user_id': _anonymousUserId,
-      'email_address': mailbox.email,
-      'provider': mailbox.provider,
-      'token': mailbox.token,
-      'is_custom': true,
-      'created_at': mailbox.createdAt.toIso8601String(),
-    });
+  Future<void> _saveMailboxes() async {
+    final jsonList = _mailboxes.map((mb) => mb.toJson()).toList();
+    await LocalStorageService.saveMailboxes(jsonList);
+  }
+
+  // Sauvegarde des messages d'une boîte
+  Future<void> _saveMessages(String mailboxId, List<Map<String, dynamic>> messages) async {
+    await LocalStorageService.saveMessages(mailboxId, messages);
+  }
+
+  // Récupération des messages depuis l'API externe + mise en cache local
+  Future<List<Map<String, dynamic>>> fetchAndCacheMessages(MailboxInfo mailbox) async {
+    List<Map<String, dynamic>> freshMessages = [];
+    if (mailbox.provider == 'mail.tm') {
+      final apiMessages = await _mailTm.getMessages(mailbox.token);
+      freshMessages = apiMessages.map((msg) => {
+        'id': msg['id'],
+        'subject': msg['subject'],
+        'from': msg['from'],
+        'body': msg['body'],
+        'received_at': msg['received_at'],
+      }).toList();
+    } else if (mailbox.provider == 'guerrillamail') {
+      final emails = await _guerrilla.fetchEmails();
+      freshMessages = emails.map((e) => {
+        'id': e['id'],
+        'subject': e['subject'],
+        'from': e['from'],
+        'body': e['body'],
+        'received_at': e['received_at'],
+      }).toList();
+    }
+    // Mettre en cache
+    await _saveMessages(mailbox.id, freshMessages);
+    return freshMessages;
+  }
+
+  // Récupérer les messages en cache d'abord, puis mettre à jour en arrière-plan
+  Future<List<Map<String, dynamic>>> getMessages(MailboxInfo mailbox) async {
+    final cached = await LocalStorageService.loadMessages(mailbox.id);
+    // Mise à jour asynchrone
+    fetchAndCacheMessages(mailbox).catchError((e) => print('Erreur refresh: $e'));
+    return cached;
   }
 
   // ----- mail.tm random -----
@@ -125,7 +118,7 @@ class MultiMailService {
       createdAt: DateTime.now(),
     );
     _mailboxes.add(mailbox);
-    await _saveMailboxToSupabase(mailbox);
+    await _saveMailboxes();
     return mailbox;
   }
 
@@ -150,7 +143,7 @@ class MultiMailService {
         createdAt: DateTime.now(),
       );
       _mailboxes.add(mailbox);
-      await _saveMailboxToSupabase(mailbox);
+      await _saveMailboxes();
       return mailbox;
     } catch (e) {
       throw Exception('Le nom "$cleaned" n\'est pas disponible.');
@@ -168,7 +161,7 @@ class MultiMailService {
       createdAt: DateTime.now(),
     );
     _mailboxes.add(mailbox);
-    await _saveMailboxToSupabase(mailbox);
+    await _saveMailboxes();
     return mailbox;
   }
 
@@ -178,8 +171,7 @@ class MultiMailService {
     if (cleaned.isEmpty) {
       throw Exception('Nom personnalisé invalide (lettres/chiffres uniquement).');
     }
-    // Créer une adresse aléatoire (initialise la session)
-    await _guerrilla.getEmailAddress();
+    await _guerrilla.getEmailAddress(); // init session
     final customEmail = await _guerrilla.setCustomEmailUser(cleaned);
     final mailbox = MailboxInfo(
       id: customEmail.split('@').first,
@@ -189,48 +181,24 @@ class MultiMailService {
       createdAt: DateTime.now(),
     );
     _mailboxes.add(mailbox);
-    await _saveMailboxToSupabase(mailbox);
+    await _saveMailboxes();
     return mailbox;
   }
 
-  Future<List<Map<String, dynamic>>> fetchAllMessages() async {
-    List<Map<String, dynamic>> allMessages = [];
+  // Récupérer tous les messages de toutes les boîtes (affichage)
+  Future<List<Map<String, dynamic>>> fetchAllMessagesForDisplay() async {
+    List<Map<String, dynamic>> all = [];
     for (final mailbox in _mailboxes) {
-      final messages = await fetchMessages(mailbox);
-      allMessages.addAll(messages.map((msg) => {
-        'id': msg.id,
-        'subject': msg.subject,
-        'from': msg.from,
+      final messages = await getMessages(mailbox);
+      all.addAll(messages.map((msg) => {
+        'id': msg['id'],
+        'subject': msg['subject'],
+        'from': msg['from'],
         'mailbox': mailbox.email,
-        'body': msg.body,
+        'body': msg['body'],
       }));
     }
-    return allMessages;
-  }
-
-  Future<List<MessageInfo>> fetchMessages(MailboxInfo mailbox) async {
-    if (mailbox.provider == 'mail.tm') {
-      final messages = await _mailTm.getMessages(mailbox.token);
-      return messages.map((msg) => MessageInfo(
-        id: msg['id'],
-        mailboxId: mailbox.id,
-        subject: msg['subject'],
-        from: msg['from'],
-        body: msg['body'],
-        receivedAt: DateTime.parse(msg['received_at']),
-      )).toList();
-    } else if (mailbox.provider == 'guerrillamail') {
-      final emails = await _guerrilla.fetchEmails();
-      return emails.map((e) => MessageInfo(
-        id: e['id'],
-        mailboxId: mailbox.id,
-        subject: e['subject'],
-        from: e['from'],
-        body: e['body'],
-        receivedAt: DateTime.parse(e['received_at']),
-      )).toList();
-    }
-    return [];
+    return all;
   }
 
   String _generatePassword() {

@@ -1,19 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase/supabase.dart';
 import 'providers/theme_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/about_screen.dart';
 
-late final SupabaseClient supabase;
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  supabase = SupabaseClient(
-    'https://ckhzttmzacsafkschtuv.supabase.co',
-    'sb_publishable_WvPEgzcKbzIVZvNGQKlwzA_uBRhGOkS',
-  );
   runApp(const OkitakoyMailApp());
 }
 
